@@ -1,7 +1,6 @@
-using System.IO;
 using System.Net.Sockets;
 
-namespace WinFormsApp7
+namespace Client_winforms
 {
     public partial class Form1 : Form
     {
@@ -9,14 +8,16 @@ namespace WinFormsApp7
         private NetworkStream stream;
         private Thread receiveThread;
         private bool isConnected = false;
-        private string serverIP = "127.0.0.1";
-        private int port = 27015;
-        
+        private string serverIP = "46.226.106.127";
+        private int port = 34987;
+
         public Form1()
         {
             InitializeComponent();
         }
-        private void ConnectToServer()
+
+
+        private void button1_Click(object sender, EventArgs e)
         {
             try
             {
@@ -24,16 +25,24 @@ namespace WinFormsApp7
                 client.Connect(serverIP, port);
                 stream = client.GetStream();
                 isConnected = true;
-                MessageBox.Show("Подключено успешно");
+                label1.Text = "Подключено успешно";
+                //MessageBox.Show("Подключено успешно");
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Ошибка подключения: " + ex.Message);
+                //MessageBox.Show("Ошибка подключения: " + ex.Message);
+                label1.Text = "Ошибка подключения: " + ex.Message;
             }
         }
+
         private void Form1_Load(object sender, EventArgs e)
         {
-            ConnectToServer();
+
+        }
+
+        private void textBox1_TextChanged(object sender, EventArgs e)
+        {
+
         }
     }
 }
