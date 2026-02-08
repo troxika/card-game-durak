@@ -76,6 +76,12 @@ _Ход противника:_
 Папка CardsReceive
 
 
+🤡<br>
+<img width="572" height="324" alt="Снимок экрана (4)" src="https://github.com/user-attachments/assets/1ed3be54-1e95-45c8-a20f-4b1b753993b6" /><br>
+Папка client.cs
+
+
+
 
 
 
