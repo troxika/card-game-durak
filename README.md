@@ -106,8 +106,17 @@ _Ход противника:_
 
 Схемы работы программы от 👁️‍🗨️  
 ![1](image/Схема%20для%20дурака.png)   
-![2](image/server_second_sprint.png)  
-![3](image/Схема%20для%20дурака.png)  
-![4](image/Схема%201.png)
+![2](image/Схема%20для%20дурака.png)  
+![3](image/Схема%201.png)
+
+🤡<br>
+<br>
+<img width="887" height="302" alt="Снимок экрана (6)" src="https://github.com/user-attachments/assets/4b21c5e7-a6e3-4520-a029-8b76be16e85b" /><br>
+<br>
+<br>
+<br>
+<img width="795" height="371" alt="Снимок экрана (5)" src="https://github.com/user-attachments/assets/5f46d281-dcce-4bb2-8511-c118ee93dccf" /><br>
+client.cs
+
 
 
