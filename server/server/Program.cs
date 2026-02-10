@@ -1,15 +1,15 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Net.Http;
 using System.Text.Json;
 using System.Reflection.PortableExecutable;
 // Создаем и запускаем сервер
-deck? de = null;
+
 ServerObject server = new ServerObject();
-await server.ListenAsync(de);
+await server.ListenAsync();
 //класс который содержит колоду
-class deck
+public class deck
 {
     public bool success { get; set; } // создалась ли колода
     public string deck_id { get; set; } // id колоды
@@ -17,7 +17,7 @@ class deck
     public int remaining {  get; set; } // сколько карт осталось
 }
 // массив карт
-class card
+public class card
 {
     public string code { get; set; } // код карты
     public string image { get; set; } // ссылка на изображение карт
@@ -27,13 +27,14 @@ class card
 
 class ServerObject
 {
+    deck de = null;
     TcpListener tcpListener = new TcpListener(IPAddress.Any, 27015);
     List<ClientObject> clients = new List<ClientObject>();
     HttpClient client = new HttpClient();
     // Для потокобезопасной работы со списком клиентов
     private readonly object clientsLock = new object();
     // подключение к api и занесение данныз из api в массивы deck и card
-    async Task createnewdeck(deck de)
+    async Task createnewdeck()
     {
         // Call asynchronous network methods in a try/catch block to handle exceptions.
         try
@@ -42,11 +43,10 @@ class ServerObject
             //response.EnsureSuccessStatusCode();
             //string responseBody = await response.Content.ReadAsStringAsync();
             // Above three lines can be replaced with new helper method below
-            string responseBody = await client.GetStringAsync("https://deckofcardsapi.com/api/deck/new/draw/?count=0"); // цифра после count отвечает за количество карт, которые возьмет и запишет сервер
+            string responseBody = await client.GetStringAsync("https://deckofcardsapi.com/api/deck/new/shuffle/?deck_count=1"); // цифра после count отвечает за количество карт, которые возьмет и запишет сервер
             //Console.WriteLine(responseBody); // вывод всего запроса json
             de = JsonSerializer.Deserialize<deck>(responseBody); // запись в массивы данных из запроса
             Console.WriteLine(de.deck_id);
-
             //Console.WriteLine($"{de.cards[1].value}"); // пример вывода значения карты в консоль
         }
         catch (HttpRequestException e)
@@ -55,18 +55,19 @@ class ServerObject
             Console.WriteLine("Message :{0} ", e.Message);
         }
     }
-    async Task cardWork(deck de)
+    async Task cardWork()
     {
         // Call asynchronous network methods in a try/catch block to handle exceptions.
         try
         {
+           
             int count = 6;
-            Console.WriteLine(de.deck_id);
+            
             //using HttpResponseMessage response = await client.GetAsync("https://deckofcardsapi.com/api/deck//draw/?count=2");
             //response.EnsureSuccessStatusCode();
             //string responseBody = await response.Content.ReadAsStringAsync();
             // Above three lines can be replaced with new helper method below
-            Console.WriteLine(de.deck_id);
+     
             string responseBody = await client.GetStringAsync($"https://deckofcardsapi.com/api/deck/{de.deck_id}/draw/?count={count}"); // цифра после count отвечает за количество карт, которые возьмет и запишет сервер
             Console.WriteLine("Подключено успешно");
             //Console.WriteLine(responseBody); // вывод всего запроса json
@@ -99,33 +100,38 @@ class ServerObject
         }
     }
     // запуск сервера и создание колоды карт
-    protected internal async Task ListenAsync(deck de)
+    protected internal async Task ListenAsync()
     {
         try
         {
-            await createnewdeck(de); // создаем колоду
+            Console.WriteLine("Введите количество игроков");
+            int i = 0;
+            int playercount = Console.Read();
+            await createnewdeck(); // создаем колоду
             tcpListener.Start(); // запускаем слушание у сервера
+            await cardWork();
             Console.WriteLine("комната создана. Ожидание подключений...");
 
             while (true)
             {
-                TcpClient tcpClient = await tcpListener.AcceptTcpClientAsync();
-
-                ClientObject clientObject = new ClientObject(tcpClient, this); // запись клиента в массив с клиентами в будующем для хранения имен
-                lock (clientsLock)
+                if (i < playercount)
                 {
-                    clients.Add(clientObject);
-                }
+                    TcpClient tcpClient = await tcpListener.AcceptTcpClientAsync();
 
-                Console.WriteLine($"Новое подключение: {clientObject.Id}");
-                await cardWork(de);
-                _ = Task.Run(() => clientObject.ProcessAsync());
-                
+                    ClientObject clientObject = new ClientObject(tcpClient, this); // запись клиента в массив с клиентами в будующем для хранения имен
+                    lock (clientsLock)
+                    {
+                        clients.Add(clientObject);
+                    }
+                    Console.WriteLine($"Новое подключение: {clientObject.Id}");
+                    i++;
+                    _ = Task.Run(() => clientObject.ProcessAsync(playercount, i));
+                }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Ошибка в ListenAsync: {ex.Message}");
+            Console.WriteLine($"Ошибка в ListenAsync: {ex.ToString()}");
         }
         finally
         {
@@ -212,7 +218,7 @@ class ClientObject
         };
     }
 
-    public async Task ProcessAsync()
+    public async Task ProcessAsync(int pcount, int i)
     {
         try
         {
@@ -235,6 +241,10 @@ class ClientObject
                     {
                         // Клиент отключился
                         break;
+                    }
+                    if (i < pcount)
+                    {
+                        Writer.Write("Начало игры");
                     }
                 }
                 catch (IOException)
