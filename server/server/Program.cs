@@ -23,19 +23,17 @@ public class card
     public string image { get; set; } // ссылка на изображение карт
     public string value { get; set; } // чифровое значение карты ( цифра на карте)
     public string suit {  get; set; } // масть 
-} 
+}
 
 class ServerObject
 {
-    
     TcpListener tcpListener = new TcpListener(IPAddress.Any, 27015);
     List<ClientObject> clients = new List<ClientObject>();
-    
-    // Для потокобезопасной работы со списком клиентов
     private readonly object clientsLock = new object();
-    // подключение к api и занесение данныз из api в массивы deck и card
-    
-    
+
+    // 👇 Текущий игрок (храним его Id)
+    public string CurrentPlayerId { get; set; }
+
     protected internal void RemoveConnection(string id)
     {
         lock (clientsLock)
@@ -43,54 +41,86 @@ class ServerObject
             ClientObject? client = clients.FirstOrDefault(c => c.Id == id);
             if (client != null)
             {
+                // Если уходит текущий игрок – переключаем ход
+                if (CurrentPlayerId == id)
+                    SwitchTurn();
+
                 clients.Remove(client);
                 client?.Close();
             }
         }
     }
-    // запуск сервера
+
     protected internal async Task ListenAsync()
     {
         try
         {
             Console.WriteLine("Введите количество игроков");
-            int i = 0;
-            int playercount = Console.Read();
+            int playercount = 2; // здесь можно заменить на int.Parse(Console.ReadLine())
 
-            tcpListener.Start(); // запускаем слушание у сервера
-            Console.WriteLine("комната создана. Ожидание подключений...");
+            tcpListener.Start();
+            Console.WriteLine("Комната создана. Ожидание подключений...");
 
-            while (true)
+            for (int i = 0; i < playercount; i++)
             {
+                TcpClient tcpClient = await tcpListener.AcceptTcpClientAsync();
+                ClientObject clientObject = new ClientObject(tcpClient, this);
 
-                
-                    TcpClient tcpClient = await tcpListener.AcceptTcpClientAsync();
-
-                    ClientObject clientObject = new ClientObject(tcpClient, this); // запись клиента в массив с клиентами в будующем для хранения имен
-                    lock (clientsLock)
-                    {
-                        clients.Add(clientObject);
-                    }
-                    Console.WriteLine($"Новое подключение: {clientObject.Id}");
-                    i++;
-                if (i <= playercount)
-                    
-                    Task.Run(() =>clientObject.ProcessAsync());
-                
+                lock (clientsLock)
+                {
+                    clients.Add(clientObject);
+                }
+                Console.WriteLine($"Новое подключение: {clientObject.Id}");
             }
+
+            // Все игроки подключены
+            Console.WriteLine("Все игроки подключены. Запуск обработки...");
+
+            // Назначаем первого игрока текущим
+            if (clients.Count > 0)
+                CurrentPlayerId = clients[0].Id;
+            Console.WriteLine($"Текущий игрок{CurrentPlayerId}");
+
+            // Запускаем обработку каждого клиента
+            foreach (var client in clients)
+            {
+                _ = Task.Run(client.ProcessAsync);
+            }
+
+            // Оповещаем о начале игры и текущем игроке
+            Console.WriteLine("начало игры");
+            // Бесконечное ожидание, чтобы сервер не завершался
+            await Task.Delay(-1);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Ошибка в ListenAsync: {ex.ToString()}");
-        }
-        finally
-        {
-            Disconnect();
+            Console.WriteLine($"Ошибка в ListenAsync: {ex}");
         }
     }
 
-    // Трансляция сообщения подключенным всем клиентам подключенным к серверу ( убрать или переделать )
-    protected internal async Task BroadcastMessageAsync(string message, string id)
+    // Переключение хода на следующего игрока (круговой порядок)
+    protected internal void SwitchTurn()
+    {
+        lock (clientsLock)
+        {
+            if (clients.Count == 0)
+            {
+                CurrentPlayerId = null;
+                return;
+            }
+
+            int currentIndex = clients.FindIndex(c => c.Id == CurrentPlayerId);
+            int nextIndex = (currentIndex + 1) % clients.Count;
+            CurrentPlayerId = clients[nextIndex].Id;
+        } 
+    }
+
+    // Оповещение всех о том, кто сейчас ходит
+    
+
+    // Рассылка сообщения всем 
+    
+    protected internal async Task BroadcastMessageAsync(string message, string? excludeId)
     {
         List<ClientObject> clientsCopy;
         lock (clientsLock)
@@ -100,11 +130,11 @@ class ServerObject
 
         foreach (var client in clientsCopy)
         {
-            if (client.Id != id) // если id клиента не равно id отправителя
+            if (client.Id != excludeId)
             {
                 try
                 {
-                    await client.Writer.WriteLineAsync(message);  // отправка сообщения всем клиентам
+                    await client.Writer.WriteLineAsync(message);
                     await client.Writer.FlushAsync();
                 }
                 catch (Exception ex)
@@ -114,6 +144,9 @@ class ServerObject
             }
         }
     }
+
+    // Трансляция сообщения подключенным всем клиентам подключенным к серверу ( убрать или переделать )
+    
 
     // Отключение всех клиентов
     protected internal void Disconnect()
@@ -142,19 +175,23 @@ class ServerObject
         tcpListener.Stop();
         Console.WriteLine("Сервер остановлен");
     }
+
 }
 // обьект клиента со всеми данными о клиенте
 class ClientObject
 {
     protected internal string Id { get; } = Guid.NewGuid().ToString();
-    protected internal StreamWriter Writer { get; } // отправка сообщения клиенту
-    protected internal StreamReader Reader { get; } // чтение соо от клиента
-    HttpClient htclient = new HttpClient();
+    protected internal StreamWriter Writer { get; }
+    protected internal StreamReader Reader { get; }
     private TcpClient client;
     private ServerObject server;
-    private string? userName;
-    private static readonly object fileLock = new object();
+
+    // 👇 Имя пользователя (теперь доступно для чтения извне)
+    public string UserName { get; private set; }
+
+    HttpClient htclient = new HttpClient();
     deck de = null;
+    public List<card> Hand { get; set; } = new List<card>();
     public ClientObject(TcpClient tcpClient, ServerObject serverObject)
     {
         client = tcpClient;
@@ -162,46 +199,97 @@ class ClientObject
 
         var stream = client.GetStream();
         Reader = new StreamReader(stream, Encoding.UTF8);
-        Writer = new StreamWriter(stream, Encoding.UTF8)
-        {
-            AutoFlush = true
-        };
+        Writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
     }
+    public async Task GiveCardToClient()
+    {
+        // Проверяем, создана ли колода на сервере
+        if (de == null)
+        {
+            Console.WriteLine($"[{Id}] Ошибка: колода не инициализирована.");
+            return;
+        }
 
+        // Сколько карт не хватает до 6
+        int need = 6 - Hand.Count;
+        if (need > 0 && de.remaining > 0)
+        {
+            int take = Math.Min(need, de.remaining);
+
+            using (HttpClient http = new HttpClient())
+            {
+                string url = $"https://deckofcardsapi.com/api/deck/{de.deck_id}/draw/?count={take}";
+                string response = await http.GetStringAsync(url);
+                var draw = JsonSerializer.Deserialize<deck>(response);
+
+                // Добавляем карты в руку текущего клиента
+                Hand.AddRange(draw.cards);
+
+                // Обновляем остаток колоды на сервере
+                de.remaining = draw.remaining;
+
+                // Отправляем клиенту коды полученных карт (для отображения)
+                var codes = draw.cards.Select(c => c.code).ToList();
+                string json = JsonSerializer.Serialize(codes);
+                await Writer.WriteLineAsync($"CARDS:{json}");
+                await Writer.FlushAsync();
+
+                Console.WriteLine($"Игроку {UserName} выдано {take} карт. Осталось в колоде: {de.remaining}");
+            }
+        }
+    }
     public async Task ProcessAsync()
     {
         try
         {
-            
-            // Получаем имя пользователя
-            userName = "trox";
-            string message = $"{userName} вошел в комнату";
-            Console.WriteLine(Id);
-            // Посылаем сообщение о входе в чат всем подключенным пользователя
-            
-                // В бесконечном цикле получаем сообщения от клиента
-                while (true)
+            createnewdeck();
+
+            // 1. Получаем имя пользователя (первое сообщение от клиента)
+            UserName = await Reader.ReadLineAsync();
+            if (string.IsNullOrWhiteSpace(UserName))
+                UserName = $"Игрок_{Id.Substring(0, 5)}";
+
+            // 2. Оповещаем всех о входе
+            string joinMessage = $"{UserName} вошёл в игру";
+            cardWork();
+            //await server.BroadcastMessageAsync(joinMessage, Id);
+            Console.WriteLine($"[{Id}] {joinMessage}");
+
+            // 3. Основной цикл обработки сообщений
+            while (true)
+            {
+                try
                 {
-                    try
+                    string? clientMessage = await Reader.ReadLineAsync();
+                    if (clientMessage == null)
+                        break; // клиент отключился
+
+                    // только текущий игрок может действовать
+                    if (server.CurrentPlayerId != Id)
                     {
-                        string? clientMessage = await Reader.ReadLineAsync();
-                        if (clientMessage == null)
-                        {
-                            // Клиент отключился
-                            break;
-                        }
+                        await Writer.WriteLineAsync("❌ Сейчас не ваш ход. Ожидайте.");
+                        continue;
+                    }
+                    if (clientMessage == "getcard()")
+                    {
+                        GiveCardToClient();
+                    }
+                    else
+                    {
 
                     }
-                    catch (IOException)
-                    {
-                        break;
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Ошибка обработки сообщения: {ex.Message}");
-                    }
                 }
-                
+                catch (IOException)
+                {
+                    break; // разрыв соединения
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Ошибка обработки сообщения от {Id}: {ex.Message}");
+                    // По желанию: отправляем клиенту сообщение об ошибке
+                    await Writer.WriteLineAsync($"Ошибка сервера: {ex.Message}");
+                }
+            }
         }
         catch (Exception e)
         {
@@ -209,24 +297,17 @@ class ClientObject
         }
         finally
         {
-            // При выходе из цикла отправляем сообщение о выходе
-            if (!string.IsNullOrEmpty(userName))
+            // Отключение клиента (обработка выхода уже есть в RemoveConnection)
+            if (!string.IsNullOrEmpty(UserName))
             {
-                string leaveMessage = $"{userName} покинул чат";
+                string leaveMessage = $"{UserName} покинул игру";
                 Console.WriteLine(leaveMessage);
-
-                try
-                {
-                    await server.BroadcastMessageAsync(leaveMessage, Id);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Не удалось отправить сообщение о выходе: {ex.Message}");
-                }
+                await server.BroadcastMessageAsync(leaveMessage, Id);
             }
             server.RemoveConnection(Id);
         }
     }
+
     async Task cardWork()
     {
         // Call asynchronous network methods in a try/catch block to handle exceptions.
@@ -247,10 +328,7 @@ class ClientObject
 
             for (int i = 0; i < count; i++)
             {
-                Console.WriteLine(de.cards[i].code);
-                Console.WriteLine(de.cards[i].value);
-                Console.WriteLine(de.cards[i].suit);
-                Console.WriteLine(de.cards[i].image);
+                Writer.WriteLine(de.cards[i].code, de.cards[i].value, de.cards[i].suit, de.cards[i].image);
             }
         }
         catch (HttpRequestException e)
