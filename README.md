@@ -165,4 +165,5 @@ client.cs
 Сделан UML диаграмма классов программы Server.cs и переделан схема плана программы
 ![a](image/uml_g.drawio%20(6).png)
 ![S](image/chheme_rab.png)
-
+сервер <br>
+<img width="821" height="499" alt="изображение" src="image/server3sprint.png" /><br>
