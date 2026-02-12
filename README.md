@@ -143,6 +143,20 @@ client.cs
 <br>
 <img width="795" height="371" alt="Снимок экрана (5)" src="https://github.com/user-attachments/assets/5f46d281-dcce-4bb2-8511-c118ee93dccf" /><br>
 client.cs
+<br>
+<br>
+
+
+# 3-й спринт
+## 12.02.2026
+@troxika - 😋 <br>
+@blqdema1l - 🤡 <br>
+@CheeseSpel - 👁️‍🗨️ <br>
+@SummerCat52 Seliss - 🤬 <br>
+@Ging4rBr4ad - 👾 <br>
+
+|№|Задачи|Исполнитель|
+|-|-|-|
 
 
 
